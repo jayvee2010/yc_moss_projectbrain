@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProjectBrain — Your entire team. One living project context.</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ==================== SIDEBAR ==================== -->
+<aside>
+  <div class="sbBrand">
+    <div class="sbMark"></div>
+    <div>
+      <div class="nm">ProjectBrain</div>
+      <div class="ds">Shared project context</div>
+    </div>
+  </div>
+
+  <div class="sbSection">
+    <div class="eyebrow">Workspace</div>
+    <div class="projCard current" id="projCard" title="Switch project">
+      <div class="nm" id="sbProjName">—</div>
+      <div class="sub"><span class="dot live"></span> Active <span id="sbProjCounts"></span></div>
+      <svg class="spark" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="#626b7c" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>
+  </div>
+
+  <div class="sbSection"><div class="eyebrow">Project</div></div>
+  <nav class="sbNav" id="sbNav">
+    <button class="nv active" data-view="overview" data-key="1">
+      <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>
+      Overview</button>
+    <button class="nv" data-view="ask" data-key="2">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M7 3a4.5 4.5 0 100 9h.5c.3 0 .5.2.5.5s-1 1.5-1 2c2.5-.5 5-2.7 5-6A4.5 4.5 0 0011.5 3H7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+      Ask Project</button>
+    <button class="nv" data-view="activity" data-key="3">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h3l2-5 3 10 2-5h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Activity <span class="cnt" id="cntActivity"></span></button>
+    <button class="nv" data-view="decisions" data-key="4">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M8 1.5l2 4 4.3.6-3.1 3 .7 4.3L8 11.4l-3.9 2 .7-4.3-3.1-3L6 5.5l2-4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      Decisions <span class="cnt" id="cntDecisions"></span></button>
+    <button class="nv" data-view="tasks" data-key="5">
+      <svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8l1.8 1.8L11 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Tasks <span class="cnt" id="cntTasks"></span></button>
+    <button class="nv" data-view="conflicts" data-key="6">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M8 2L15 14H1L8 2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.6v.9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      Conflicts <span class="cnt" id="cntConflicts"></span></button>
+  </nav>
+
+  <div class="sbSection" style="margin-top:auto"><div class="eyebrow">Engine</div></div>
+  <nav class="sbNav">
+    <button class="nv" data-view="moss" data-key="7">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M8 1v3M8 12v3M1 8h3M12 8h3M3.5 3.5l2 2M10.5 10.5l2 2M12.5 3.5l-2 2M5.5 10.5l-2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
+      Moss</button>
+    <button class="nv" data-view="ingest" data-key="8">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      Feed Context</button>
+    <button class="nv" data-view="settings" data-key="9">
+      <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6L5 5M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Settings</button>
+  </nav>
+
+  <div class="sbFoot">
+    <div class="sbStatus" id="sbStatus"><span class="dot bad"></span> connecting…</div>
+    <div class="sbStatus" id="sbMoss" style="display:none"><span class="dot ok"></span> retrieval ready <span class="lat" id="sbMossLat"></span></div>
+  </div>
+</aside>
+
+<!-- ==================== MAIN ==================== -->
+<main>
+  <!-- project strip (shared across pages) -->
+  <div style="padding: 0 34px; max-width: 1180px;">
+    <div class="projStrip">
+      <div>
+        <div class="nm" id="stripName">—</div>
+        <div class="tiny t3" id="stripDesc"></div>
+      </div>
+      <div class="meta">
+        <span class="st mut" id="stripActive">—</span>
+        <span class="hideSm" id="stripStack"></span>
+        <span class="faces" id="stripFaces" title="Team & agents"></span>
+        <button class="btn ghost" id="whatsNewBtn" title="Changes since you last looked">✦ What's new?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== OVERVIEW ========== -->
+  <section class="page active" id="page-overview">
+    <div class="hero">
+      <div class="l">
+        <h1 id="ovName">—</h1>
+        <div class="desc" id="ovDesc"></div>
+        <div class="stackRow" id="ovStack"></div>
+      </div>
+      <div class="health" id="ovHealth"></div>
+    </div>
+
+    <div class="liveBar" id="liveBar"></div>
+
+    <div class="statline" id="ovStats"></div>
+
+    <div class="cols">
+      <div>
+        <div class="sect"><span class="eyebrow">Latest activity</span>
+          <button class="more" data-goto="activity">Full timeline →</button></div>
+        <div id="ovTimeline"></div>
+      </div>
+      <div>
+        <div class="sect"><span class="eyebrow">Decisions</span>
+          <button class="more" data-goto="decisions">All decisions →</button></div>
+        <div id="ovDecisions"></div>
+
+        <div class="sect"><span class="eyebrow">Team</span></div>
+        <div id="ovTeam"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== ASK ========== -->
+  <section class="page" id="page-ask">
+    <div class="pageTitle">Ask your project</div>
+    <div class="pageSub">Anything the team has built, decided, tried, or got stuck on.</div>
+
+    <div class="cmdWrap">
+      <div class="cmd">
+        <span class="spark">✦</span>
+        <input id="askInput" placeholder="Ask about decisions, blockers, experiments…" spellcheck="false" autocomplete="off">
+        <span class="kbd" id="askKbd">↵ ask</span>
+      </div>
+    </div>
+    <div class="qPills" id="qPills"></div>
+
+    <div class="answerZone" id="answerZone" style="display:none">
+      <div class="ansHead"><span class="eyebrow">Answer</span><span id="aiWho" class="st mint">projectbrain</span></div>
+      <div class="answerText" id="answerText"></div>
+
+      <button class="retr" id="retrBtn" style="display:none">
+        <span class="dot ok"></span> <span id="retrLabel">retrieval</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="#626b7c" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <div class="retrPanel" id="retrPanel"></div>
+
+      <div class="ansHead" style="margin-top:22px"><span class="eyebrow">Context used</span></div>
+      <div class="srcList" id="srcList"></div>
+    </div>
+  </section>
+
+  <!-- ========== ACTIVITY ========== -->
+  <section class="page" id="page-activity">
+    <div class="pageHead">
+      <div class="grow">
+        <div class="pageTitle">Activity</div>
+        <div class="pageSub">Every human and AI action, in one living thread.</div>
+      </div>
+      <div class="actions"><button class="btn ghost" id="tlRefresh">Refresh</button></div>
+    </div>
+    <div class="tl" id="timeline"></div>
+  </section>
+
+  <!-- ========== DECISIONS ========== -->
+  <section class="page" id="page-decisions">
+    <div class="pageTitle">Decisions</div>
+    <div class="pageSub">What the team chose — and why. Click any decision for its full context.</div>
+    <div id="decList"></div>
+  </section>
+
+  <!-- ========== TASKS ========== -->
+  <section class="page" id="page-tasks">
+    <div class="pageTitle">Tasks & blockers</div>
+    <div class="pageSub">Work in flight, and everything standing in its way.</div>
+    <div class="sect" style="margin-top:8px"><span class="eyebrow">Active blockers</span></div>
+    <div id="blockerList"></div>
+    <div class="sect"><span class="eyebrow">Task list</span><span class="hint" id="taskHint"></span></div>
+    <div id="taskList"></div>
+  </section>
+
+  <!-- ========== CONFLICTS ========== -->
+  <section class="page" id="page-conflicts">
+    <div class="pageTitle">Conflict check</div>
+    <div class="pageSub">Test any proposal against everything the team has already decided — before it ships.</div>
+
+    <div class="cmdWrap" style="max-width:720px">
+      <div class="cmd">
+        <span class="spark" style="color:var(--amber)">△</span>
+        <input id="conflictInput" placeholder="Propose an action — e.g. Let's switch to MongoDB" spellcheck="false" autocomplete="off">
+        <span class="kbd">↵ check</span>
+      </div>
+    </div>
+    <div class="qPills" id="conflictPills"></div>
+
+    <div id="conflictZone" style="display:none; max-width:860px">
+      <div class="vsWrap">
+        <div class="vsCol current">
+          <div class="eyebrow">Current project decision</div>
+          <div class="big" id="vsCurrent">—</div>
+          <div class="who2" id="vsCurrentWho"></div>
+        </div>
+        <div class="vsMid">VS</div>
+        <div class="vsCol proposal">
+          <div class="eyebrow" style="color:var(--mint)">New proposal</div>
+          <div class="big" id="vsProposal">—</div>
+          <div class="who2" id="vsProposalWho"></div>
+        </div>
+      </div>
+      <div id="impactBox"></div>
+      <div id="verdictBox"></div>
+    </div>
+  </section>
+
+  <!-- ========== INGEST ========== -->
+  <section class="page" id="page-ingest">
+    <div class="pageTitle">Feed ProjectBrain</div>
+    <div class="pageSub">Give your project the context it needs — conversations, notes, decisions, or a whole repository.</div>
+
+    <div class="modeRow">
+      <button class="tab active" data-mode="text">Paste context</button>
+      <button class="tab" data-mode="github">Connect repository</button>
+    </div>
+
+    <div class="feedWrap" id="mode-text">
+      <div class="dropzone">
+        <div class="dzHead">
+          <span class="t">Paste a conversation, meeting notes, or a decision summary</span>
+          <button class="btn ghost" id="demoFillBtn">Use example</button>
+        </div>
+        <textarea id="ingestText" placeholder="e.g. 'We tried Tesseract for OCR but rejected it because handwriting recognition was poor. We will evaluate PaddleOCR instead…'"></textarea>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px; align-items:center">
+        <input id="ingestAuthor" placeholder="Who is this from?" style="width:190px" spellcheck="false">
+        <button class="btn primary" id="ingestBtn">Feed the brain</button>
+        <span class="tiny t3" id="ingestHint"></span>
+      </div>
+    </div>
+
+    <div class="feedWrap" id="mode-github" style="display:none">
+      <div class="dropzone">
+        <div class="dzHead"><span class="t">Any public GitHub repository</span></div>
+        <input id="repoInput" placeholder="owner/name or full GitHub URL" style="width:100%" spellcheck="false">
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px; align-items:center">
+        <label class="st mut" style="cursor:pointer"><input type="checkbox" id="useLlm" checked style="margin-right:6px"> AI insight pass</label>
+        <button class="btn primary" id="connectBtn">Connect & analyze</button>
+      </div>
+      <div class="tiny t3" style="margin-top:10px">Imports commits with real git authors, open issues (bug-labeled become blockers) and the README. Set <span class="mono">GITHUB_TOKEN</span> in .env for higher rate limits.</div>
+    </div>
+
+    <div class="pipeline" id="pipeline" style="display:none"></div>
+  </section>
+
+  <!-- ========== MOSS ========== -->
+  <section class="page" id="page-moss">
+    <div class="pageTitle">Moss retrieval engine</div>
+    <div class="pageSub">The retrieval layer underneath every answer. Local, in-process, sub-10ms.</div>
+    <div id="mossPanel"></div>
+    <div class="sect" style="margin-top:30px"><span class="eyebrow">Try it</span></div>
+    <div class="tiny t2" style="max-width:560px">Every answer on the Ask page shows the memories Moss retrieved and the exact measured time it took. Click the retrieval chip under any answer.</div>
+  </section>
+
+  <!-- ========== SETTINGS ========== -->
+  <section class="page" id="page-settings">
+    <div class="pageTitle">Settings</div>
+    <div class="pageSub">Workspace preferences for this browser.</div>
+    <div class="setRow">
+      <div class="info"><div class="t">Auto-refresh project state</div><div class="s">Poll the engine every 60 seconds so the overview stays live.</div></div>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="setAuto" checked><span class="track"></span></label></div>
+    </div>
+    <div class="setRow">
+      <div class="info"><div class="t">Show keyboard shortcuts</div><div class="s">Display the shortcut bar at the bottom of the window.</div></div>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="setKbd" checked><span class="track"></span></label></div>
+    </div>
+    <div class="setRow">
+      <div class="info"><div class="t">Engine URL</div><div class="s">Where the ProjectBrain backend runs. Only used when this page is opened as a file instead of served by the engine.</div></div>
+      <div class="ctl" style="display:flex; gap:8px"><input id="setEngine" style="width:220px" spellcheck="false" placeholder="http://127.0.0.1:8000"><button class="btn" id="setEngineBtn">Save</button></div>
+    </div>
+    <div class="setRow">
+      <div class="info"><div class="t">Project identity</div><div class="s">The namespace this project lives under. Switch it to start a fresh context.</div></div>
+      <div class="ctl" style="display:flex; gap:8px"><input id="setProject" style="width:180px" spellcheck="false"><button class="btn" id="setProjectBtn">Switch</button></div>
+    </div>
+    <div class="sect" style="margin-top:30px"><span class="eyebrow">Danger zone</span></div>
+    <div class="setRow" style="border-bottom:none">
+      <div class="info"><div class="t">Re-seed demo project</div><div class="s">Repopulates the demo story (decisions, rejections, one blocker). Only affects the current project.</div></div>
+      <div class="ctl"><button class="btn danger" id="reseedBtn">Re-run seed</button></div>
+    </div>
+  </section>
+</main>
+
+<!-- keyboard hint bar -->
+<div class="kbdBar" id="kbdBar">
+  <span><b>1–9</b> navigate</span><span><b>/</b> ask</span><span><b>N</b> what's new</span>
+</div>
+
+<!-- AI activity pill -->
+<div class="aiPill" id="aiPill">
+  <span class="dot live"></span>
+  <span><span class="nm" id="aiPillName">Claude</span> <span class="stTxt" id="aiPillStatus"></span></span>
+</div>
+
+<!-- what's new modal -->
+<div class="modalBack" id="whatsNewModal">
+  <div class="modal">
+    <div class="mHead">
+      <div class="t">Since you were away</div>
+      <div class="tiny t3" id="wnRange"></div>
+    </div>
+    <div class="mBody" id="wnBody"></div>
+    <div class="mFoot">
+      <button class="btn ghost" data-close>Close</button>
+      <button class="btn primary" data-close data-goto="activity">Review in timeline</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div class="hovercard" id="hovercard"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
