@@ -35,14 +35,11 @@ from backend.moss_service import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Local/uvicorn path: initialize here. On Vercel, ASGI lifespan does not
-    # run, so bootstrap also happens per-request via the middleware below.
-    if os.environ.get("VERCEL") == "1":
-        from backend.vercel_bootstrap import bootstrap
-        bootstrap()
-
-    # Initialize SQLite database and tables on startup
-    init_db()
+    # Bootstrap runs everywhere (uvicorn local, Docker, serverless): inits the
+    # DB, and with SEED_ON_BOOT=1 seeds the demo project. Idempotent.
+    # On Vercel ASGI lifespan doesn't run, so the middleware below also calls it.
+    from backend.vercel_bootstrap import bootstrap
+    bootstrap()
 
     # Pre-warm every existing Moss index so the first query reports true latency
     try:
@@ -60,12 +57,11 @@ app = FastAPI(title="ProjectBrain API", lifespan=lifespan)
 @app.middleware("http")
 async def serverless_bootstrap(request, call_next):
     """Serverless safety net: ASGI lifespan doesn't run on Vercel, so the
-    /tmp database init + demo seeding must happen on the first request.
+    database init + demo seeding must happen on the first request.
     bootstrap() is idempotent (guarded by a module flag), so this is a
     no-op after the first call on any instance."""
-    if os.environ.get("VERCEL") == "1":
-        from backend.vercel_bootstrap import bootstrap
-        bootstrap()
+    from backend.vercel_bootstrap import bootstrap
+    bootstrap()
     return await call_next(request)
 
 # Allow the demo frontend (any origin for the hackathon) to call the API
@@ -292,7 +288,8 @@ async def ingest_github(request: GitHubIngestRequest):
 async def ask(request: AskRequest):
     start_total = time.perf_counter()
 
-    # 1. Query Moss for the top 5 relevant memories
+    # 1. Retrieve relevant memories (Moss, or the BM25 fallback when Moss is
+    #    unavailable on this platform — the engine is labeled per request)
     moss_start = time.perf_counter()
     try:
         relevance_info, _ = await query_memories(
@@ -301,6 +298,9 @@ async def ask(request: AskRequest):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     moss_ms = (time.perf_counter() - moss_start) * 1000.0
+    retrieval_engine = (
+        relevance_info[0].get("retrieval", "moss") if relevance_info else "moss"
+    )
 
     # 2. Use returned memory IDs to retrieve complete memory objects from SQLite
     context_start = time.perf_counter()
@@ -351,10 +351,12 @@ Provide a concise, accurate answer based on the project memories above."""
 
     total_ms = (time.perf_counter() - start_total) * 1000.0
 
-    # 5. Return answer, sources, and timings
+    # 5. Return answer, sources, and timings (retrieval names the engine:
+    #    "moss" or "sqlite-fallback · …ms · reason")
     return {
         "answer": answer,
         "sources": sources,
+        "retrieval": retrieval_engine,
         "timings": {
             "moss_ms": round(moss_ms, 2),
             "context_ms": round(context_ms, 2),
@@ -398,7 +400,7 @@ async def check_action(request: CheckRequest):
     """
     start_total = time.perf_counter()
 
-    # 1. Query Moss for the top 5 relevant memories
+    # 1. Retrieve relevant memories for conflict evaluation (Moss or fallback)
     moss_start = time.perf_counter()
     try:
         relevance_info, _ = await query_memories(

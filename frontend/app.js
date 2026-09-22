@@ -428,14 +428,16 @@ async function ask(q) {
       else at.textContent = answer;
     };
     tick();
-    // retrieval chip — REAL measured values only
+    // retrieval chip — REAL measured values only; engine label from the backend
     if (t.moss_ms != null) {
+      const engine = (data.retrieval || "moss").split(" ·")[0]; // "moss" | "sqlite-fallback"
+      const engineName = engine === "moss" ? "Moss retrieval" : "Keyword retrieval (BM25 fallback)";
       $("retrBtn").style.display = "inline-flex";
       $("retrLabel").innerHTML = `Retrieved <span class="n">&nbsp;${sources.length}&nbsp;</span> relevant memories · <span class="ms">&nbsp;${t.moss_ms}ms</span>`;
       const kinds = {};
       sources.forEach((s) => (kinds[s.type] = (kinds[s.type] || 0) + 1));
       $("retrPanel").innerHTML = `
-        <div class="rrow"><span>Moss retrieval</span><b>${t.moss_ms} ms</b></div>
+        <div class="rrow"><span>${engineName}</span><b>${t.moss_ms} ms</b></div>
         <div class="rrow"><span>Answer generation</span><b>${t.llm_ms ?? "—"} ms</b></div>
         <div class="rrow"><span>End to end</span><b>${t.total_ms ?? "—"} ms</b></div>
         <div class="rrow" style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px"><span>Memory types used</span><b>${Object.entries(kinds).map(([k, v]) => `${v} ${k}`).join(" · ") || "—"}</b></div>`;

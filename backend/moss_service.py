@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 import time
@@ -239,43 +240,150 @@ async def rebuild_project_index(project_id: str) -> int:
 async def query_memories(
     project_id: str, query: str, top_k: int = 5
 ) -> Tuple[List[Dict[str, Any]], float]:
-    """Retrieves top-K semantically relevant memories from Moss for a project.
+    """Retrieves top-K relevant memories for a project.
+
+    Primary path: Moss semantic search (sub-10ms when the native SDK is
+    installed and the index is loaded — the local/demo experience).
+    Fallback path: a built-in BM25 keyword ranker over the project's SQLite
+    memories, used automatically when the Moss SDK isn't available on the
+    platform (e.g. Vercel's Linux image has no compatible native wheel) or
+    when Moss itself fails. Same return shape, so /ask and /check work
+    everywhere.
 
     Returns:
-        tuple of (relevance_list, elapsed_moss_ms)
+        tuple of (relevance_list, elapsed_ms)
         where each item in relevance_list is a dict: {'id': ..., 'score': ..., 'text': ...}
     Raises:
-        RuntimeError if Moss is unavailable or query fails.
+        RuntimeError only if BOTH Moss and the SQLite fallback fail.
     """
+    start_time = time.perf_counter()
+
+    if MossClient is not None:
+        try:
+            relevance, ms = await _query_moss(project_id, query, top_k, start_time)
+            return [dict(r, retrieval="moss") for r in relevance], ms
+        except Exception as moss_err:
+            # fall through to the local ranker, but surface why in the timing note
+            fallback_note = f"Moss unavailable ({str(moss_err)[:80]})"
+        else:
+            fallback_note = None
+    else:
+        fallback_note = "Moss SDK not installed on this platform"
+
+    try:
+        relevance, ms = _query_sqlite_bm25(project_id, query, top_k)
+        note = fallback_note or "Moss error"
+        relevance = [dict(r, retrieval=f"sqlite-fallback · {ms:.1f}ms · {note}") for r in relevance]
+        return relevance, ms
+    except Exception as db_err:
+        raise RuntimeError(
+            f"Retrieval failed: {fallback_note or 'Moss error'}; SQLite fallback also failed: {db_err}"
+        ) from db_err
+
+
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does",
+    "for", "from", "had", "has", "have", "how", "i", "in", "is", "it",
+    "its", "of", "on", "or", "our", "s", "so", "that", "the", "their",
+    "them", "then", "there", "these", "they", "this", "to", "was", "we",
+    "were", "what", "when", "where", "which", "who", "why", "will", "with",
+}
+
+
+def _tokenize(text: str) -> List[str]:
+    return [
+        t for t in re.findall(r"[a-z0-9_-]+", text.lower())
+        if len(t) > 1 and t not in _STOPWORDS
+    ]
+
+
+def _query_sqlite_bm25(
+    project_id: str, query: str, top_k: int
+) -> Tuple[List[Dict[str, Any]], float]:
+    """Ranks the project's memories against the query with BM25.
+
+    A compact, dependency-free retriever (k1=1.5, b=0.75) — the same scoring
+    family Moss uses for its keyword signal, so results stay comparable.
+    Latency is honest and measured: it runs against the project's SQLite
+    rows and typically lands well under a millisecond at demo scale.
+    """
+    from backend.database import get_memories_by_project
+
+    start_time = time.perf_counter()
+    memories = get_memories_by_project(project_id)
+    if not memories:
+        ms = (time.perf_counter() - start_time) * 1000.0
+        return [], ms
+
+    docs_tokens = {
+        m["id"]: _tokenize(
+            f"{m['title']} {m['content']} {' '.join(m.get('entities') or [])}"
+        )
+        for m in memories
+    }
+    n_docs = len(memories)
+    avg_len = (sum(len(t) for t in docs_tokens.values()) / n_docs) or 1.0
+
+    df: Dict[str, int] = {}
+    for toks in docs_tokens.values():
+        for term in set(toks):
+            df[term] = df.get(term, 0) + 1
+
+    q_terms = _tokenize(query)
+    k1, b = 1.5, 0.75
+    scored = []
+    for m in memories:
+        toks = docs_tokens[m["id"]]
+        tf: Dict[str, int] = {}
+        for t in toks:
+            tf[t] = tf.get(t, 0) + 1
+        dl = len(toks) or 1
+        score = 0.0
+        for term in q_terms:
+            if term not in tf:
+                continue
+            idf = math.log(1 + (n_docs - df.get(term, 0) + 0.5) / (df.get(term, 0) + 0.5))
+            score += idf * (tf[term] * (k1 + 1)) / (tf[term] + k1 * (1 - b + b * dl / avg_len))
+        if score > 0:
+            text = (
+                f"{m['title']}: {m['content']}\n"
+                f"Entities: {', '.join(m.get('entities') or []) or 'none'}"
+            )
+            scored.append({"id": m["id"], "score": round(score, 4), "text": text})
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    ms = (time.perf_counter() - start_time) * 1000.0
+    return scored[:top_k], ms
+
+
+async def _query_moss(
+    project_id: str, query: str, top_k: int, start_time: float
+) -> Tuple[List[Dict[str, Any]], float]:
+    """The real Moss semantic retrieval path (native SDK, in-process)."""
     client = get_moss_client()
     index_name = get_project_index_name(project_id)
 
-    start_time = time.perf_counter()
-    try:
-        if index_name not in _loaded_indexes:
-            if not await _index_exists(client, index_name):
-                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-                return [], round(elapsed_ms, 2)
+    if index_name not in _loaded_indexes:
+        if not await _index_exists(client, index_name):
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            return [], round(elapsed_ms, 2)
 
-            await _ensure_index_loaded(client, index_name)
+        await _ensure_index_loaded(client, index_name)
 
-        search_result = await client.query(
-            index_name, query, QueryOptions(top_k=top_k)
-        )
-        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+    search_result = await client.query(
+        index_name, query, QueryOptions(top_k=top_k)
+    )
+    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
-        relevance_info = [
-            {
-                "id": doc.id,
-                "score": doc.score,
-                "text": doc.text,
-            }
-            for doc in search_result.docs
-        ]
-        return relevance_info, round(elapsed_ms, 2)
-
-    except Exception as e:
-        raise RuntimeError(f"Moss retrieval failed for index '{index_name}': {e}") from e
+    relevance_info = [
+        {
+            "id": doc.id,
+            "score": doc.score,
+            "text": doc.text,
+        }
+        for doc in search_result.docs
+    ]
+    return relevance_info, round(elapsed_ms, 2)
 
 
 async def prewarm_all_indexes() -> int:

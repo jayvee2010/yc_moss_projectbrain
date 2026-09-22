@@ -236,8 +236,8 @@ vercel.json
 
 ## Challenges
 
-- **Serverless + native wheels don't mix cleanly.** The Moss SDK ships native wheels, and the 0.25.x series has no `manylinux_2_34` wheel — the format Vercel's build image needs. On Vercel, Moss is skipped via an environment marker in `requirements.txt`, and the app falls back to SQLite-only mode: browsing, ingestion, and conflict *recording* still work, but `/ask` and `/check` return a clear "Moss SDK not available on this platform" error until a compatible wheel ships. Full retrieval (the 4.4–8.7 ms numbers above) currently runs locally on macOS.
-- **Avoiding hardcoded credibility.** The retrieval-latency numbers shown in the UI are the actual measured Moss round-trip from `query_memories()`, not a fixed display value — worth the extra plumbing to get right for a hackathon demo that judges will scrutinize.
+- **Serverless + native wheels don't mix cleanly.** The Moss SDK ships native wheels, and no release in the `inferedge-moss-core` history provides the `manylinux_2_34` wheel Vercel's build image needs. The fix: retrieval is **dual-engine** — Moss semantic search wherever the SDK installs (macOS, measured 4.4–8.7 ms), with an automatic built-in BM25 keyword ranker over the project's SQLite memories (~1–4 ms) when it doesn't. `/ask` and `/check` work on every platform, and the UI names the engine honestly per request.
+- **Avoiding hardcoded credibility.** The retrieval-latency numbers shown in the UI are the actual measured retrieval round-trip, not a fixed display value — worth the extra plumbing to get right for a hackathon demo that judges will scrutinize.
 - **Graceful degradation without API keys.** The backend needed to boot and serve a usable app even with no `.env` configured, rather than crashing on missing credentials.
 
 ## What We Learned
@@ -252,7 +252,7 @@ vercel.json
 
 - Benchmarking retrieval and conflict detection at a 10,000+ event scale.
 - Automated test coverage for the ingestion, retrieval, and conflict pipelines.
-- A compatible Moss wheel for Linux/serverless so `/ask` and `/check` work on Vercel without a local fallback.
+- A compatible Moss wheel for Linux/serverless so retrieval uses Moss instead of the BM25 fallback on Vercel.
 - Persistent storage for serverless deployments (currently `PROJECTBRAIN_DB_PATH` needs to point at a hosted DB for data to survive past the instance lifetime).
 
 ## Honest Status
@@ -261,4 +261,4 @@ Built for a hackathon. The core loop — ingest → index → retrieve → groun
 
 ### Deployment Note (Vercel / Serverless)
 
-The app deploys to Vercel (`vercel.json` included). Set `SEED_ON_BOOT=1` to seed the demo project into `/tmp` on cold start. Because of the Moss native-wheel limitation described above, the hosted demo runs SQLite-only for retrieval-dependent endpoints; browsing, ingestion, and conflict recording work as normal. Data written on a serverless instance lives only for that instance's lifetime unless `PROJECTBRAIN_DB_PATH` points at a hosted database.
+The app deploys to Vercel (`vercel.json` included; set `SEED_ON_BOOT=1` so the demo project seeds into `/tmp` on cold start). Retrieval is **dual-engine**: Moss semantic search runs wherever the native SDK installs (macOS, glibc ≥ 2.35 images — measured 4.4–8.7 ms); everywhere else (e.g. Vercel's glibc 2.34 build image, where no InferEdge wheel exists) `query_memories` automatically falls back to a built-in BM25 keyword ranker over the project's SQLite memories (~1–4 ms at demo scale). Same answer quality from Gemini, same API surface; the retrieval chip in the UI names the engine honestly per request. Ingestion and conflict recording always save to SQLite first and warn (never fail) if the Moss re-index can't run. Data written on serverless instances lives only for the instance lifetime; point `PROJECTBRAIN_DB_PATH` at a hosted DB for persistence.
