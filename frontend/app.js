@@ -627,7 +627,7 @@ async function connectGitHub() {
     pipelineStep(4, s.issues + " issues");
     setTimeout(pipelineDone, 300);
     toast(`Connected ${s.repo}: ${s.commits} commits · ${s.issues} issues · ${s.insights} insights`, "", 7000);
-    if (s.moss_error) toast("Moss indexing failed — /ask needs real Moss keys", "warn", 7000);
+    if (s.moss_error) toast("Saved to the project — Moss re-index unavailable on this host (Linux wheel gap), so /ask retrieval won't see it here", "warn", 8000);
     loadAll(true);
   } catch (e) {
     pipelineStep(3);
