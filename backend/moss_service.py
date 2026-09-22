@@ -4,7 +4,18 @@ import re
 import time
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from dotenv import load_dotenv
-from moss import DocumentInfo, MossClient, QueryOptions
+
+# The Moss SDK ships native wheels that don't cover every deployment target
+# (e.g. manylinux_2_34 serverless images). Import it optionally so the app
+# still boots and serves everything SQLite-backed; retrieval endpoints raise
+# a clear RuntimeError that the API surfaces as a graceful error state.
+try:
+    from moss import DocumentInfo, MossClient, QueryOptions
+except Exception as _import_err:  # pragma: no cover - platform dependent
+    DocumentInfo = MossClient = QueryOptions = None  # type: ignore[assignment]
+    _MOSS_IMPORT_ERROR: Optional[Exception] = _import_err
+else:
+    _MOSS_IMPORT_ERROR = None
 
 from backend.database import get_connection
 
@@ -31,6 +42,13 @@ def get_moss_client() -> MossClient:
     global _client
     if _client is not None:
         return _client
+
+    if MossClient is None:
+        raise RuntimeError(
+            "Moss SDK is not available on this platform "
+            f"(import failed: {_MOSS_IMPORT_ERROR}). Retrieval is disabled; "
+            "all other features work from the local database."
+        )
 
     project_id = os.getenv("MOSS_PROJECT_ID")
     project_key = os.getenv("MOSS_PROJECT_KEY")
@@ -269,6 +287,8 @@ async def prewarm_all_indexes() -> int:
     Returns the number of indexes loaded.
     Raises RuntimeError if credentials are missing or loading fails.
     """
+    if MossClient is None:
+        return 0  # SDK unavailable on this platform — retrieval stays disabled
     client = get_moss_client()
     try:
         indexes = await client.list_indexes()

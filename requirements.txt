@@ -4,5 +4,9 @@ mangum
 google-genai
 python-dotenv
 pydantic
-moss
 httpx
+# Moss ships native wheels; the 0.25.x series has no manylinux_2_34 wheel,
+# which is what Vercel's build image provides. Skip it on Linux x86_64 —
+# the app degrades gracefully (moss_service.py imports it optionally) and
+# retrieval stays local-Mac-only until a compatible wheel is published.
+moss; sys_platform != "linux" or platform_machine != "x86_64"

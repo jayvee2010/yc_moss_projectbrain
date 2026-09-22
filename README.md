@@ -128,4 +128,8 @@ frontend/
 
 ## Honest status
 
-Built for a hackathon; the core loop (ingest → index → retrieve → grounded cited answer → conflict flag) is verified end-to-end with real credentials. Not done yet: an explicit conflict-resolution endpoint (supersede/keep a decision), the 10,000-event scale benchmark, and automated tests. Retrieval latency at this demo scale is single-digit-to-tens of milliseconds; the at-volume claim is the next thing to measure.
+Built for a hackathon; the core loop (ingest → index → retrieve → grounded cited answer → conflict flag → resolve) is verified end-to-end with real credentials, including the conflict-resolution endpoint (supersede/keep). Not done yet: the 10,000-event scale benchmark and automated tests. Retrieval latency at this demo scale is single-digit-to-tens of milliseconds; the at-volume claim is the next thing to measure.
+
+### Deployment note (Vercel/serverless)
+
+The app deploys to Vercel (`vercel.json` included; set `SEED_ON_BOOT=1` so the demo project seeds into `/tmp` on cold start). One platform limitation: the Moss SDK ships native wheels and the current 0.25.x series has no `manylinux_2_34` wheel, so on Vercel's build image the wheel is skipped (environment marker in `requirements.txt`) and the app runs SQLite-only — browsing, ingestion and conflict recording work; `/ask` and `/check` return a clear "Moss SDK not available on this platform" error until InferEdge publishes a compatible wheel. Full retrieval (measured 4.4–8.7 ms) runs locally on macOS today. Data written on serverless instances lives only for the instance lifetime; point `PROJECTBRAIN_DB_PATH` at a hosted DB for persistence.
