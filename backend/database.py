@@ -1,11 +1,15 @@
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 
-# Location of the SQLite database in the project root
-DB_PATH = Path(__file__).resolve().parent.parent / "projectbrain.db"
+# Location of the SQLite database.
+# Serverless hosts (e.g. Vercel) have a read-only filesystem except /tmp,
+# so when PROJECTBRAIN_DB_PATH points at /tmp the seed runs on cold start.
+_default_db_path = Path(__file__).resolve().parent.parent / "projectbrain.db"
+DB_PATH = Path(os.environ.get("PROJECTBRAIN_DB_PATH", str(_default_db_path)))
 
 
 def get_connection(db_path: Union[Path, str] = DB_PATH) -> sqlite3.Connection:

@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+mangum
 google-genai
 python-dotenv
 pydantic

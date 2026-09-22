@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -34,6 +35,11 @@ from backend.moss_service import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Serverless (Vercel): bootstrap a /tmp SQLite + seed demo data on cold start
+    if os.environ.get("VERCEL") == "1":
+        from backend.vercel_bootstrap import bootstrap
+        bootstrap()
+
     # Initialize SQLite database and tables on startup
     init_db()
 

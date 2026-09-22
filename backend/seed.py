@@ -173,7 +173,7 @@ def hours_ago(hours: float) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
 
-async def run_seed(project_id: str) -> None:
+async def run_seed(project_id: str, index_into_moss: bool = True) -> None:
     init_db()
 
     with get_connection() as conn:
@@ -219,6 +219,10 @@ async def run_seed(project_id: str) -> None:
         )
 
     print(f"Seeded {len(memories)} memories and {len(SEED_TASKS)} tasks into '{project_id}'.")
+
+    if not index_into_moss:
+        print("Skipping Moss indexing (index_into_moss=False) — data is SQLite-only.")
+        return
 
     try:
         count = await rebuild_project_index(project_id)
