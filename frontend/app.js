@@ -606,6 +606,7 @@ async function ingestText(text, authorOverride) {
     pipelineStep(4, Math.round(r.timings?.total_ms || 0) + "ms");
     setTimeout(pipelineDone, 300);
     toast(`Extracted ${r.memories.length} memories in ${(r.timings?.total_ms / 1000).toFixed(1)}s`, "");
+    if (r.moss_warning) toast("Saved to the project, but Moss indexing is unavailable on this host — /ask won't see it until indexing works", "warn", 8000);
     $("ingestText").value = "";
     loadAll(true);
   } catch (e) {

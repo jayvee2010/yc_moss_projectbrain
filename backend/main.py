@@ -245,18 +245,22 @@ async def ingest(request: IngestRequest):
 
         memories.append(memory_data)
 
-    # Index saved memories into Moss
+    # Index saved memories into Moss — best-effort: SQLite is the source of
+    # truth, so a Moss outage/credit limit/platform gap must not lose data
+    # (mirrors /resolve and /ingest/github behavior).
+    moss_warning: Optional[str] = None
     if memories:
         try:
             await index_memories(request.project_id, memories)
         except RuntimeError as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            moss_warning = str(e)
 
     total_ms = (time.perf_counter() - start_total) * 1000.0
 
     return {
         "success": True,
         "memories": memories,
+        "moss_warning": moss_warning,
         "timings": {
             "llm_ms": round(llm_ms, 2),
             "total_ms": round(total_ms, 2),
