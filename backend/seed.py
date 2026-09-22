@@ -173,7 +173,12 @@ def hours_ago(hours: float) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
 
-async def run_seed(project_id: str, index_into_moss: bool = True) -> None:
+def seed_sqlite(project_id: str) -> int:
+    """Seeds the demo project's memories and tasks into SQLite.
+
+    Fully synchronous and event-loop-safe, so it can run inside a serverless
+    request handler (Vercel) without asyncio.run(). Returns memory count.
+    """
     init_db()
 
     with get_connection() as conn:
@@ -219,6 +224,12 @@ async def run_seed(project_id: str, index_into_moss: bool = True) -> None:
         )
 
     print(f"Seeded {len(memories)} memories and {len(SEED_TASKS)} tasks into '{project_id}'.")
+    return len(memories)
+
+
+async def run_seed(project_id: str, index_into_moss: bool = True) -> None:
+    """Seeds SQLite, then (optionally) rebuilds the project's Moss index."""
+    seed_sqlite(project_id)
 
     if not index_into_moss:
         print("Skipping Moss indexing (index_into_moss=False) — data is SQLite-only.")

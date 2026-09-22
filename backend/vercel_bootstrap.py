@@ -1,23 +1,24 @@
 import os
+import threading
 
 """
-Vercel entrypoint for ProjectBrain.
+Serverless (Vercel) bootstrapping for ProjectBrain.
 
-- Cold start: seeds the demo project into a /tmp SQLite database (serverless
-  filesystems are read-only except /tmp) and optionally indexes it into Moss.
-- Warm start: reuses the existing /tmp database for the lifetime of the
-  instance.
+- Cold start: initializes a /tmp SQLite database (serverless filesystems are
+  read-only except /tmp) and, with SEED_ON_BOOT=1, seeds the demo project.
+- Warm start: no-op for the lifetime of the instance (_BOOTSTRAPPED flag).
+- MOSS_AUTOSYNC=1 additionally indexes the seed into Moss in a background
+  thread (async work cannot run on the request's event loop during boot).
 
-Enable auto-seeding by setting SEED_ON_BOOT=1 in Vercel environment variables.
-The auto-seed skips Moss indexing unless MOSS_AUTOSYNC=1 is also set, so a
-Moss outage or credit limit never breaks a deploy.
+Everything here is deliberately synchronous and event-loop-safe: serverless
+platforms invoke the app inside a running loop where asyncio.run() fails.
 """
 
 _BOOTSTRAPPED = False
 
 
 def bootstrap() -> None:
-    """Runs once per serverless instance, before the first request."""
+    """Runs once per serverless instance, before the first response."""
     global _BOOTSTRAPPED
     if _BOOTSTRAPPED:
         return
@@ -40,11 +41,33 @@ def bootstrap() -> None:
         return  # instance already seeded (warm start)
 
     try:
-        import asyncio
+        from backend.seed import seed_sqlite
 
-        from backend import seed
-
-        asyncio.run(seed.run_seed("aura-smart-home", index_into_moss=os.environ.get("MOSS_AUTOSYNC", "").strip() == "1"))
+        seed_sqlite("aura-smart-home")
         print(f"Seeded demo data into {DB_PATH}")
     except Exception as e:  # never block a deploy on seeding
         print(f"Seed on boot skipped: {e}")
+        return
+
+    if os.environ.get("MOSS_AUTOSYNC", "").strip() == "1":
+        # Moss calls are async; run them off the request loop in a throwaway
+        # thread so a credit outage or slow network can't hang the response.
+        def _index():
+            try:
+                asyncio_run(seed_index("aura-smart-home"))
+            except Exception as e:
+                print(f"Moss autosync skipped: {e}")
+
+        def asyncio_run(coro):
+            import asyncio
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro)
+            finally:
+                loop.close()
+
+        def seed_index(project_id):
+            from backend.seed import run_seed
+            return run_seed(project_id, index_into_moss=True)
+
+        threading.Thread(target=_index, daemon=True).start()

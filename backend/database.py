@@ -7,9 +7,13 @@ from typing import Any, Dict, List, Optional, Union
 
 # Location of the SQLite database.
 # Serverless hosts (e.g. Vercel) have a read-only filesystem except /tmp,
-# so when PROJECTBRAIN_DB_PATH points at /tmp the seed runs on cold start.
+# so there we default to /tmp automatically (VERCEL=1 is set by the platform).
+# PROJECTBRAIN_DB_PATH overrides the location in any environment.
 _default_db_path = Path(__file__).resolve().parent.parent / "projectbrain.db"
-DB_PATH = Path(os.environ.get("PROJECTBRAIN_DB_PATH", str(_default_db_path)))
+if os.environ.get("VERCEL") == "1":
+    DB_PATH = Path("/tmp/projectbrain.db")
+else:
+    DB_PATH = Path(os.environ.get("PROJECTBRAIN_DB_PATH", str(_default_db_path)))
 
 
 def get_connection(db_path: Union[Path, str] = DB_PATH) -> sqlite3.Connection:

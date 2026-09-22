@@ -35,7 +35,8 @@ from backend.moss_service import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Serverless (Vercel): bootstrap a /tmp SQLite + seed demo data on cold start
+    # Local/uvicorn path: initialize here. On Vercel, ASGI lifespan does not
+    # run, so bootstrap also happens per-request via the middleware below.
     if os.environ.get("VERCEL") == "1":
         from backend.vercel_bootstrap import bootstrap
         bootstrap()
@@ -54,6 +55,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ProjectBrain API", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def serverless_bootstrap(request, call_next):
+    """Serverless safety net: ASGI lifespan doesn't run on Vercel, so the
+    /tmp database init + demo seeding must happen on the first request.
+    bootstrap() is idempotent (guarded by a module flag), so this is a
+    no-op after the first call on any instance."""
+    if os.environ.get("VERCEL") == "1":
+        from backend.vercel_bootstrap import bootstrap
+        bootstrap()
+    return await call_next(request)
 
 # Allow the demo frontend (any origin for the hackathon) to call the API
 app.add_middleware(
