@@ -1,6 +1,5 @@
 /* ============================================================
-   ProjectBrain — application logic
-   Real data only: /state · /timeline · /ask · /check · /ingest*
+   ProjectBrain — application logic    Real data only: /state · /timeline · /ask · /check · /resolve · /ingest*
    Derived metrics are computed from real data and labeled as such.
    ============================================================ */
 "use strict";
@@ -478,6 +477,7 @@ function renderConflictPills() {
 }
 
 let lastConflictAction = "";
+let lastConflictMemoryId = null;   // current decision the proposal conflicts with (from /check)
 async function checkConflict(action) {
   action = (action || $("conflictInput").value).trim();
   if (!action) return;
@@ -493,6 +493,7 @@ async function checkConflict(action) {
     const data = await api("/check", { project_id: projectId(), action });
     const t = data.timings || {};
     const mem = data.conflicting_memory;
+    lastConflictMemoryId = mem?.id || null;
     // current side
     if (mem) {
       $("vsCurrent").textContent = mem.title;
@@ -523,8 +524,8 @@ async function checkConflict(action) {
             <button class="btn" id="cKeep">Keep current decision</button>
           </div>
         </div>`;
-      $("cKeep").onclick = () => { $("verdictBox").innerHTML = ""; toast("Kept the current decision", ""); };
-      $("cAccept").onclick = () => resolveConflict();
+      $("cKeep").onclick = () => postResolution("keep");
+      $("cAccept").onclick = () => postResolution("supersede");
     } else {
       $("verdictBox").innerHTML = `
         <div class="verdict good">
@@ -538,18 +539,36 @@ async function checkConflict(action) {
     $("verdictBox").innerHTML = `<div class="verdict bad"><div class="vh">△ Check failed</div><p class="expl">${esc(err.message)}</p></div>`;
   }
 }
-async function resolveConflict() {
-  const btn = $("cAccept");
+/* Both Conflicts-page actions hit POST /resolve:
+   supersede → old decision marked 'superseded', proposal becomes the active decision
+   keep      → proposal recorded as a rejected_approach so future identical
+               proposals hit deterministic conflict detection (the system learns) */
+async function postResolution(resolution) {
+  const btn = resolution === "supersede" ? $("cAccept") : $("cKeep");
+  if (!btn) return;
+  const original = btn.textContent;
   btn.disabled = true; btn.textContent = "Recording…";
   try {
     const who = $("ingestAuthor").value.trim() || "you";
-    await api("/ingest", { project_id: projectId(), text: `Decision: ${lastConflictAction}`, author: who });
-    toast("Recorded as a new project decision", "");
+    const res = await api("/resolve", {
+      project_id: projectId(),
+      action: lastConflictAction,
+      resolution,
+      conflicting_memory_id: lastConflictMemoryId,
+      author: who,
+    });
+    const ms = res.timings?.total_ms;
+    if (resolution === "supersede") {
+      toast(`Recorded as the new active decision${res.superseded_memory_id ? " · old decision superseded" : ""}${ms ? ` · ${ms}ms` : ""}`, "");
+    } else {
+      toast(`Kept the current decision · proposal recorded as rejected${ms ? ` · ${ms}ms` : ""}`, "");
+    }
+    if (res.moss_warning) toast("Moss sync deferred — resolution saved in SQLite: " + res.moss_warning, "warn");
     $("verdictBox").innerHTML = "";
     loadAll(true);
   } catch (e) {
     toast("Could not record: " + e.message, "bad");
-    btn.disabled = false; btn.textContent = "Create new decision";
+    btn.disabled = false; btn.textContent = original;
   }
 }
 

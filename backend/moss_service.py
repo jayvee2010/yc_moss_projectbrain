@@ -81,8 +81,30 @@ def _build_docs(memories: List[Dict[str, Any]]) -> List[DocumentInfo]:
     return docs
 
 
+async def _ensure_index_loaded(client: MossClient, index_name: str) -> None:
+    """Loads an index only if this process hasn't loaded it yet.
+
+    Loading is a cloud operation with account-level credits, so repeated
+    load_index calls on an already-loaded index are the main way this app
+    can burn through the account's limits. Every load path must go through
+    this helper instead of calling load_index directly.
+    """
+    if index_name in _loaded_indexes:
+        return
+    await client.load_index(index_name)
+    _loaded_indexes.add(index_name)
+
+
+async def _index_exists(client: MossClient, index_name: str) -> bool:
+    existing_indexes = await client.list_indexes()
+    return any(idx.name == index_name for idx in existing_indexes)
+
+
 async def index_memories(project_id: str, memories: List[Dict[str, Any]]) -> None:
-    """Indexes multiple ProjectBrain memories in Moss under the project's index."""
+    """Indexes multiple ProjectBrain memories in Moss under the project's index.
+
+    add_docs is an upsert, so repeated ingestion of the same memory IDs is safe.
+    """
     if not memories:
         return
 
@@ -91,16 +113,12 @@ async def index_memories(project_id: str, memories: List[Dict[str, Any]]) -> Non
     docs = _build_docs(memories)
 
     try:
-        existing_indexes = await client.list_indexes()
-        index_exists = any(idx.name == index_name for idx in existing_indexes)
-
-        if not index_exists:
+        if not await _index_exists(client, index_name):
             await client.create_index(index_name, docs)
         else:
+            await _ensure_index_loaded(client, index_name)
             await client.add_docs(index_name, docs)
-
-        await client.load_index(index_name)
-        _loaded_indexes.add(index_name)
+        await _ensure_index_loaded(client, index_name)
     except Exception as e:
         raise RuntimeError(f"Moss indexing failed for index '{index_name}': {e}") from e
 
@@ -126,10 +144,13 @@ async def delete_indexed_memories(project_id: str, doc_ids: Iterable[str]) -> No
 
 
 async def rebuild_project_index(project_id: str) -> int:
-    """Rebuilds a project's Moss index from SQLite (the source of truth).
+    """Syncs a project's Moss index with SQLite (the source of truth), in place.
 
     Guarantees no stale/orphan documents: everything currently in SQLite for
-    this project gets indexed, anything else in the index disappears.
+    this project gets indexed, anything else in the index is deleted. The sync
+    happens IN PLACE (add_docs upsert + delete_docs) — never delete_index plus
+    create_index — so reconnecting a repository doesn't recreate the index or
+    re-load it from the cloud, which would burn account load credits.
     Returns the number of documents indexed.
     """
     with get_connection() as conn:
@@ -167,16 +188,34 @@ async def rebuild_project_index(project_id: str) -> int:
     docs = _build_docs(memories)
 
     try:
+        if not await _index_exists(client, index_name):
+            # First ingest for this project: create with docs, then load once.
+            await client.create_index(index_name, docs)
+            await _ensure_index_loaded(client, index_name)
+            return len(docs)
+
+        # Index exists: make it live in this process (no-op if pre-warmed),
+        # then sync document set in place.
+        await _ensure_index_loaded(client, index_name)
+
         try:
-            await client.delete_index(index_name)  # no-op failure if it doesn't exist
+            existing_docs = await client.get_docs(index_name)
+            existing_ids = {d.id for d in existing_docs}
         except Exception:
-            pass
-        await client.create_index(index_name, docs)
-        await client.load_index(index_name)
-        _loaded_indexes.add(index_name)
+            existing_ids = set()  # can't diff — upsert only, no deletes
+
+        current_ids = {d.id for d in docs}
+        stale_ids = existing_ids - current_ids
+        if stale_ids:
+            try:
+                await client.delete_docs(index_name, list(stale_ids))
+            except Exception:
+                pass  # stale docs are cosmetic; don't fail the ingest
+
+        await client.add_docs(index_name, docs)  # upsert
         return len(docs)
     except Exception as e:
-        raise RuntimeError(f"Moss index rebuild failed for '{index_name}': {e}") from e
+        raise RuntimeError(f"Moss index sync failed for '{index_name}': {e}") from e
 
 
 async def query_memories(
@@ -196,14 +235,11 @@ async def query_memories(
     start_time = time.perf_counter()
     try:
         if index_name not in _loaded_indexes:
-            existing_indexes = await client.list_indexes()
-            index_exists = any(idx.name == index_name for idx in existing_indexes)
-            if not index_exists:
+            if not await _index_exists(client, index_name):
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
                 return [], round(elapsed_ms, 2)
 
-            await client.load_index(index_name)
-            _loaded_indexes.add(index_name)
+            await _ensure_index_loaded(client, index_name)
 
         search_result = await client.query(
             index_name, query, QueryOptions(top_k=top_k)
@@ -237,8 +273,10 @@ async def prewarm_all_indexes() -> int:
     try:
         indexes = await client.list_indexes()
         for idx in indexes:
-            await client.load_index(idx.name)
-            _loaded_indexes.add(idx.name)
-        return len(indexes)
+            try:
+                await _ensure_index_loaded(client, idx.name)
+            except Exception:
+                pass  # one cold index shouldn't stop the rest of the pre-warm
+        return len(_loaded_indexes)
     except Exception as e:
         raise RuntimeError(f"Moss pre-warm failed: {e}") from e

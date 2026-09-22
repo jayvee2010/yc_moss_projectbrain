@@ -20,9 +20,11 @@ from backend.database import (
     get_tasks_for_project,
     init_db,
     insert_memory,
+    update_memory_status,
 )
 from backend.github_ingest import GitHubError, ingest_github_repo
 from backend.llm import generate, extract_memories
+from backend.schemas import ResolveRequest
 from backend.moss_service import (
     index_memories,
     prewarm_all_indexes,
@@ -497,6 +499,122 @@ Return valid JSON with this exact schema:
             "check_ms": round(check_ms, 2),
             "total_ms": round(total_ms, 2),
         },
+    }
+
+
+@app.post("/resolve")
+async def resolve_conflict(request: ResolveRequest):
+    """Resolves a conflict detected by /check — the backend half of the
+    Conflicts page's actions.
+
+    resolution = "supersede": the current decision is marked 'superseded'
+      and the proposal is recorded as the new active 'decision' (with an
+      audit 'change' event linking back to the replaced memory).
+    resolution = "keep": the proposal is recorded as a REJECTED decision
+      so future identical proposals hit deterministic conflict detection —
+      the system learns from the team's answer.
+
+    SQLite is the source of truth: a Moss sync failure degrades to a
+    warning instead of losing the resolution.
+    """
+    resolution = request.resolution.strip().lower()
+    if resolution not in ("supersede", "keep"):
+        raise HTTPException(status_code=422, detail="resolution must be 'supersede' or 'keep'")
+    if not request.action.strip():
+        raise HTTPException(status_code=422, detail="action must not be empty")
+
+    start_total = time.perf_counter()
+    now = datetime.now(timezone.utc).isoformat()
+    author = request.author.strip() or "unknown"
+
+    # Optional current decision being replaced (validates project ownership)
+    replaced: Optional[Dict[str, Any]] = None
+    if request.conflicting_memory_id:
+        matches = get_memories_by_ids([request.conflicting_memory_id])
+        replaced = next((m for m in matches if m["project_id"] == request.project_id), None)
+        if replaced is None:
+            raise HTTPException(status_code=404, detail="conflicting_memory_id not found in this project")
+
+    rationale = request.rationale.strip()
+
+    if resolution == "supersede":
+        if replaced is not None:
+            try:
+                update_memory_status(replaced["id"], "superseded")
+            except RuntimeError as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        new_decision = {
+            "id": f"decision-{uuid.uuid4().hex[:8]}",
+            "project_id": request.project_id,
+            "type": "decision",
+            "title": (rationale[:60] if rationale else request.action.strip()),
+            "content": (
+                f"{request.action.strip()}"
+                + (f" Rationale: {rationale}" if rationale else "")
+                + (f" (replaces: {replaced['title']})" if replaced else "")
+            ),
+            "status": "active",
+            "author": author,
+            "entities": [],
+            "created_at": now,
+        }
+        audit_event = {
+            "id": f"change-{uuid.uuid4().hex[:8]}",
+            "project_id": request.project_id,
+            "type": "change",
+            "title": f"Decision superseded: {replaced['title']}" if replaced else "New decision recorded",
+            "content": (
+                f"{author} superseded '{replaced['title']}' with: {request.action.strip()}"
+                if replaced
+                else f"{author} recorded a new decision: {request.action.strip()}"
+            ),
+            "status": "completed",
+            "author": author,
+            "entities": [],
+            "created_at": now,
+        }
+        memories = [new_decision, audit_event]
+    else:  # keep
+        rejected_decision = {
+            "id": f"rejected-{uuid.uuid4().hex[:8]}",
+            "project_id": request.project_id,
+            "type": "rejected_approach",
+            "title": f"Rejected: {request.action.strip()[:60]}",
+            "content": (
+                f"Proposed '{request.action.strip()}' was rejected during conflict check."
+                + (f" Reason: {rationale}" if rationale else "")
+                + (f" Team kept the existing decision: {replaced['title']}." if replaced else "")
+            ),
+            "status": "rejected",
+            "author": author,
+            "entities": [],
+            "created_at": now,
+        }
+        memories = [rejected_decision]
+
+    # Persist to SQLite (source of truth)
+    try:
+        for m in memories:
+            insert_memory(m)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Best-effort Moss sync — never lose a resolution over retrieval-layer credits
+    moss_warning: Optional[str] = None
+    try:
+        await index_memories(request.project_id, memories)
+    except RuntimeError as e:
+        moss_warning = str(e)
+
+    total_ms = (time.perf_counter() - start_total) * 1000.0
+    return {
+        "success": True,
+        "resolution": resolution,
+        "recorded": memories,
+        "superseded_memory_id": replaced["id"] if replaced else None,
+        "moss_warning": moss_warning,
+        "timings": {"total_ms": round(total_ms, 2)},
     }
 
 

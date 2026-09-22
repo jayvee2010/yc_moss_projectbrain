@@ -107,6 +107,21 @@ def insert_memory(memory_data: Dict[str, Any], db_path: Union[Path, str] = DB_PA
         raise RuntimeError(f"Database error while inserting memory: {e}") from e
 
 
+def update_memory_status(
+    memory_id: str, new_status: str, db_path: Union[Path, str] = DB_PATH
+) -> None:
+    """Updates a memory's status (e.g. marking a decision superseded)."""
+    try:
+        with get_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE memories SET status = ? WHERE id = ?;",
+                (new_status, memory_id),
+            )
+    except sqlite3.Error as e:
+        raise RuntimeError(f"Database error while updating memory status: {e}") from e
+
+
 def get_memories_by_project(
     project_id: str, db_path: Union[Path, str] = DB_PATH
 ) -> List[Dict[str, Any]]:
